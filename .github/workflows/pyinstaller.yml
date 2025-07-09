@@ -128,8 +128,12 @@ jobs:
   upload-to-repo:
     needs: pyinstaller-build
     runs-on: ubicloud
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Download all artifacts
         uses: actions/download-artifact@v4
       
@@ -183,8 +187,6 @@ jobs:
           git add -A
           git commit -m "$COMMIT_MESSAGE" || echo "No changes to commit"
           git push
-        env:
-          GITHUB_TOKEN: ${{ secrets.fankai }}
 
   clean-artefact:
     needs: [pyinstaller-build, upload-to-repo]
