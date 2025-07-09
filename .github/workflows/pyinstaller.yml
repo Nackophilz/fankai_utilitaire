@@ -191,6 +191,8 @@ jobs:
   clean-artefact:
     needs: [pyinstaller-build, upload-to-repo]
     runs-on: ubicloud
+    permissions:
+      actions: write
     steps:
       - name: Déclenchement du workflow de suppression des artefacts
         uses: benc-uk/workflow-dispatch@v1
