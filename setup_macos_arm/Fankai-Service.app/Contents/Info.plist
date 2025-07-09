@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>Fankai-Service</string>
+	<key>CFBundleExecutable</key>
+	<string>Fankai-Service</string>
+	<key>CFBundleIconFile</key>
+	<string>generated-56e48a47862830230e91d5444d5882668bb499d24fa0ee9a37a8dbb37a24334d.icns</string>
+	<key>CFBundleIdentifier</key>
+	<string>Fankai-Service</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Fankai-Service</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.0.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+</dict>
+</plist>
