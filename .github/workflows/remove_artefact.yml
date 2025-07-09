@@ -7,8 +7,11 @@ on:
 jobs:
   delete-artifacts:
     runs-on: ubicloud
+    permissions:
+      actions: write
     steps:
-      - uses: kolpav/purge-artifacts-action@v1
+      - name: Purge old artifacts
+        uses: kolpav/purge-artifacts-action@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           expire-in: 0days
