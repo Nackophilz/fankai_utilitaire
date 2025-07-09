@@ -1,0 +1,21 @@
+name: Notification Discord sur Push
+
+on: [push]
+
+jobs:
+  notification:
+    name: Notification Discord
+    runs-on: ubicloud
+
+    steps:
+      - name: Envoyer notification sur Discord
+        uses: tsickert/discord-webhook@v7.0.0
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK }}
+          content: |
+            📌 **${{ github.actor }} a poussé un commit :**
+            🔹 **Titre :** ${{ github.event.commits[0].message }}
+            
+            🔸 **Dépôt :** ${{ github.repository }}
+            
+            🔗 [Voir les changements](https://github.com/${{ github.repository }}/commit/${{ github.sha }})

@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # Configuration pour les actions GitHub
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+  # Configuration pour requirements.txt
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"

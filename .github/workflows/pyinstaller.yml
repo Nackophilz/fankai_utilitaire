@@ -1,0 +1,209 @@
+name: PyInstaller Build
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/*.py'
+
+jobs:
+  get-changed-files:
+    runs-on: ubicloud
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Récupération des fichiers modifiés
+        id: get-changed-files
+        uses: masesgroup/retrieve-changed-files@v3
+        with:
+          format: space-delimited
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Génération de la matrice
+        id: set-matrix
+        run: |
+          files="${{ steps.get-changed-files.outputs.added_modified }}"
+          os_types=("ubicloud" "windows-latest" "macos-13" "macos-14" "ubicloud-standard-2-arm")
+          matrix_data=()
+          for file in $files; do
+            if [[ $file == src/*.py ]]; then
+              for os in "${os_types[@]}"; do
+                matrix_data+=("{\"os\":\"$os\",\"file\":\"$file\"}")
+              done
+            fi
+          done
+          if [ ${#matrix_data[@]} -eq 0 ]; then
+            echo "Aucun fichier Python modifié dans le dossier 'src'"
+            echo "matrix=[]" >> $GITHUB_OUTPUT
+          else
+            matrix_string="[$(IFS=,; echo "${matrix_data[*]}")]"
+            echo "matrix=$matrix_string" >> $GITHUB_OUTPUT
+          fi
+
+  pyinstaller-build:
+    needs: get-changed-files
+    if: ${{ fromJson(needs.get-changed-files.outputs.matrix)[0] }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.get-changed-files.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Mise en cache des packages pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      
+      - name: Cache pip wheels (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: c:\users\cleme\appdata\local\pip\cache\wheels
+          key: windows-wheels-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            windows-wheels-
+      
+      - name: Cache pip wheels (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/pip/wheels
+          key: macOS-wheels-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            macOS-wheels-
+      
+      - name: Installation des dépendances
+        run: pip install -r requirements.txt
+      
+      - name: Préparation des variables d'environnement
+        shell: bash
+        run: |
+          filename=$(basename "${{ matrix.file }}" .py)
+          echo "FILENAME=$filename" >> $GITHUB_ENV
+          
+          if [ "${{ matrix.os }}" == "ubicloud" ]; then
+            upx_dir="--upx-dir dev/upx/linux/x64"
+          elif [ "${{ matrix.os }}" == "ubicloud-standard-2-arm" ]; then
+            upx_dir="--upx-dir dev/upx/linux/arm64"
+          elif [ "${{ runner.os }}" == "Windows" ]; then
+            upx_dir="--upx-dir dev/upx/windows"
+          else
+            upx_dir=""
+          fi
+          
+          if [ "$filename" == "Fankai-Service" ]; then
+            options="--onefile --noconsole --name $filename $upx_dir --icon assets/Logo_Fankai.ico --collect-all pyfiglet --collect-all pyGithub --collect-all plexAPI --collect-all _cffi_backend"
+          else
+            options="--onefile --console --name $filename $upx_dir --icon assets/Logo_Fankai.ico --collect-all pyfiglet --collect-all pyGithub --collect-all plexAPI --collect-all rapidfuzz --collect-all _cffi_backend"
+          fi
+          echo "PYINSTALLER_OPTIONS=$options" >> $GITHUB_ENV
+      
+      - name: Détection précise de l'architecture
+        id: detect-arch
+        shell: bash
+        run: |
+          arch=$(uname -m)
+          if [[ "$arch" == "aarch64" ]]; then
+            echo "arch=arm64" >> $GITHUB_OUTPUT
+          else
+            echo "arch=x64" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Création de l'exécutable
+        uses: sayyid5416/pyinstaller@v1.8.0
+        with:
+          python_ver: '3.11'
+          spec: '${{ matrix.file }}'
+          requirements: 'requirements.txt'
+          upload_exe_with_name: '${{ env.FILENAME }}-${{ matrix.os }}'
+          python_arch: '${{ steps.detect-arch.outputs.arch }}'
+          options: ${{ env.PYINSTALLER_OPTIONS }}
+
+  upload-to-repo:
+    needs: pyinstaller-build
+    runs-on: ubicloud
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+      
+      - name: List directories
+        run: |
+          echo "Répertoires disponibles :"
+          find . -maxdepth 1 -type d
+          echo "--------------------"
+      
+      - name: Déplacement des fichiers selon l'OS
+        run: |
+          for folder in *; do
+              if [[ -d "$folder" ]]; then
+                  echo "Traitement du dossier : $folder"
+                  if [[ "$folder" == *"ubicloud-standard-2-arm"* ]]; then
+                      destination="setup_linux_arm"
+                  elif [[ "$folder" == *"ubicloud"* ]]; then
+                      destination="setup_linux"
+                  elif [[ "$folder" == *"windows-latest"* ]]; then
+                      destination="setup"
+                  elif [[ "$folder" == *"macos-13"* ]]; then
+                      destination="setup_macos"
+                  elif [[ "$folder" == *"macos-14"* ]]; then
+                      destination="setup_macos_arm"
+                  else
+                      echo "Pas de compilation nécessaire pour $folder"
+                      continue
+                  fi
+                  mkdir -p "$destination"
+                  cp -rf "./$folder/." "$destination/"
+                  
+                  if [[ "$destination" == "setup_linux" && -f "$destination/Fankai" ]]; then
+                    mkdir -p "docker/x86"
+                    cp "$destination/Fankai" "docker/x86/"
+                  fi
+                  
+                  if [[ "$destination" == "setup_linux_arm" && -f "$destination/Fankai" ]]; then
+                    mkdir -p "docker/arm"
+                    cp "$destination/Fankai" "docker/arm/"
+                  fi
+                  
+                  rm -rf "./$folder"
+              fi
+          done
+      
+      - name: Commit et push
+        run: |
+          COMMIT_MESSAGE=$(git log -1 --pretty=%B)
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add -A
+          git commit -m "$COMMIT_MESSAGE" || echo "No changes to commit"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.fankai }}
+
+  clean-artefact:
+    needs: [pyinstaller-build, upload-to-repo]
+    runs-on: ubicloud
+    steps:
+      - name: Déclenchement du workflow de suppression des artefacts
+        uses: benc-uk/workflow-dispatch@v1
+        with:
+          workflow: remove_artefact.yml
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  discord-notification:
+    needs: [pyinstaller-build, upload-to-repo, clean-artefact]
+    runs-on: ubicloud
+    steps:
+      - name: Notification de fin
+        uses: tsickert/discord-webhook@v7.0.0
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK }}
+          content: |
+            ✅ Build ${{ github.sha }} terminé avec succès !
+            Prêt pour le déploiement en production

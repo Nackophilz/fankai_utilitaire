@@ -1,0 +1,45 @@
+FROM --platform=$BUILDPLATFORM ubuntu:latest
+
+# Bash comme shell par défaut
+SHELL ["/bin/bash", "-c"]
+
+# Ddépendances nécessaires dont Git
+RUN apt-get update && apt-get install -y \
+    git \
+    cron \
+    sudo
+
+# Répertoires de travail
+RUN mkdir -p /data/app
+
+# Définir le répertoire de travail
+WORKDIR /data/app
+
+# Copier les fichiers Fankai locaux dans l'image Docker en fonction de l'architecture
+COPY x86/Fankai /data/app/Fankai-x86
+COPY arm/Fankai /data/app/Fankai-arm
+
+# Créer un lien symbolique vers le bon binaire en fonction de l'architecture quand ça veut bien
+RUN set -eux; \
+    arch="$(uname -m)"; \
+    case "$arch" in \
+        x86_64) ln -s /data/app/Fankai-x86 /data/app/Fankai ;; \
+        aarch64) ln -s /data/app/Fankai-arm /data/app/Fankai ;; \
+        *) echo >&2 "Architecture non supportée: $arch"; exit 1 ;; \
+    esac
+
+# Donner les permissions d'exécution à l'utilitaire (c'est mieux)
+RUN chmod +x /data/app/Fankai
+
+# Définir le volume pour les données
+VOLUME ["/data"]
+VOLUME ["/tmp"]
+
+# Créer un fichier de log pour cron
+RUN touch /var/log/cron.log
+
+# Configurer le nettoyage automatique du /tmp (parce que sa prend dla place)
+RUN echo '*/30 * * * * find /tmp -type f -mmin +30 -delete > /dev/null 2>&1' | crontab -
+
+# Démarrer le service cron et rediriger la sortie vers le fichier de log
+CMD cron && tail -f /var/log/cron.log
