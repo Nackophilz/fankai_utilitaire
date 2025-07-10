@@ -1,4 +1,4 @@
-name: Build and Push Docker Image to GHCR
+name: Build and Push Docker Images
 
 on:
   push:
@@ -38,6 +38,12 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
     - name: Login to GitHub Container Registry
       uses: docker/login-action@v3
       with:
@@ -45,7 +51,7 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Build and push
+    - name: Build and push to both registries
       uses: docker/build-push-action@v6
       with:
         context: ./docker
@@ -53,6 +59,8 @@ jobs:
         platforms: ${{ matrix.platform }}
         push: true
         tags: |
+          nackophilz/fankai_utilitaire:${{ github.event.inputs.image_tag || 'latest' }}-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
+          nackophilz/fankai_utilitaire:${{ github.sha }}-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
           ghcr.io/nackophilz/fankai_utilitaire:${{ github.event.inputs.image_tag || 'latest' }}-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
           ghcr.io/nackophilz/fankai_utilitaire:${{ github.sha }}-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
 
@@ -65,6 +73,12 @@ jobs:
       packages: write
       
     steps:
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
     - name: Login to GitHub Container Registry
       uses: docker/login-action@v3
       with:
@@ -72,11 +86,21 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Create and push multi-arch manifest
+    - name: Create and push multi-arch manifests
       run: |
+        # Crée et pousse les manifestes pour Docker Hub
+        docker buildx imagetools create -t nackophilz/fankai_utilitaire:${{ github.event.inputs.image_tag || 'latest' }} \
+          nackophilz/fankai_utilitaire:${{ github.event.inputs.image_tag || 'latest' }}-amd64 \
+          nackophilz/fankai_utilitaire:${{ github.event.inputs.image_tag || 'latest' }}-arm64
+        docker buildx imagetools create -t nackophilz/fankai_utilitaire:${{ github.sha }} \
+          nackophilz/fankai_utilitaire:${{ github.sha }}-amd64 \
+          nackophilz/fankai_utilitaire:${{ github.sha }}-arm64
+          
+        # Crée et pousse les manifestes pour GHCR
         docker buildx imagetools create -t ghcr.io/nackophilz/fankai_utilitaire:${{ github.event.inputs.image_tag || 'latest' }} \
           ghcr.io/nackophilz/fankai_utilitaire:${{ github.event.inputs.image_tag || 'latest' }}-amd64 \
           ghcr.io/nackophilz/fankai_utilitaire:${{ github.event.inputs.image_tag || 'latest' }}-arm64
         docker buildx imagetools create -t ghcr.io/nackophilz/fankai_utilitaire:${{ github.sha }} \
           ghcr.io/nackophilz/fankai_utilitaire:${{ github.sha }}-amd64 \
           ghcr.io/nackophilz/fankai_utilitaire:${{ github.sha }}-arm64
+
