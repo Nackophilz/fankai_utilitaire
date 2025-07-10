@@ -272,58 +272,69 @@ class FileSystemManager:
 class FileMatcher:
     """Logique de correspondance entre les fichiers vidéo et NFO."""
     
-
     def find_matches(self, video_files, nfo_files, rename_dict, threshold=95):
         """
         Trouve les correspondances. Utilise une logique spéciale pour One Piece
-        afin de trouver toutes les destinations possibles, et non juste la meilleure.
+        afin de trouver toutes les destinations possibles parce que y a pas le choix.
         """
         standard_matches = []
         unmatched = []
         one_piece_matches = {} 
         
-        # Prépare les dictionnaires de NFO pour la recherche
-        self.nfo_basenames = {os.path.splitext(os.path.basename(nfo))[0]: nfo for nfo in nfo_files}
-        
-        # Sépare les NFO de One Piece pour optimiser la recherche
-        op_nfo_choices = {k: v for k, v in self.nfo_basenames.items() if 'one piece' in k.lower()}
-        non_op_nfo_choices = {k: v for k, v in self.nfo_basenames.items() if 'one piece' not in k.lower()}
+        nfo_map = {}
+        for nfo_path in nfo_files:
+            basename = os.path.splitext(os.path.basename(nfo_path))[0]
+            if basename not in nfo_map:
+                nfo_map[basename] = []
+            nfo_map[basename].append(nfo_path)
+
+        op_nfo_map = {k: v for k, v in nfo_map.items() if 'one piece' in k.lower()}
+        non_op_nfo_map = {k: v for k, v in nfo_map.items() if 'one piece' not in k.lower()}
 
         for video in tqdm(video_files, desc="Analyse des fichiers"):
             video_basename = os.path.splitext(os.path.basename(video))[0]
             found_match = False
 
-            # 1. Correspondance exacte via le dictionnaire de renommage
+
             if video_basename in rename_dict:
                 nfo_target_name = rename_dict[video_basename]
-                if nfo_target_name in self.nfo_basenames:
-                    standard_matches.append((video, self.nfo_basenames[nfo_target_name], 101))
+                if nfo_target_name in nfo_map:
+                    standard_matches.append((video, nfo_map[nfo_target_name][0], 101))
                     found_match = True
 
-            # 2. Si le fichier est un "One Piece"
+
             elif 'one piece' in video_basename.lower():
-                # Cherche TOUTES les correspondances possibles dépassant le seuil
-                possible_matches = process.extract(video_basename, op_nfo_choices.keys(), scorer=fuzz.ratio, score_cutoff=threshold)
+                possible_matches = []
+                for nfo_basename in op_nfo_map.keys():
+                    if video_basename == nfo_basename:
+                        possible_matches.append((nfo_basename, 100))
                 
                 if possible_matches:
-                    # Stocke toutes les destinations valides pour ce fichier vidéo
-                    one_piece_matches[video] = [(op_nfo_choices[match[0]], match[1]) for match in possible_matches]
-                    found_match = True
+                    all_paths_for_video = []
+                    for match_tuple in possible_matches:
+                        matched_basename = match_tuple[0]
+                        score = match_tuple[1]
+                        paths = op_nfo_map[matched_basename]
+                        for path in paths:
+                            all_paths_for_video.append((path, score))
+                    
+                    if all_paths_for_video:
+                        one_piece_matches[video] = all_paths_for_video
+                        found_match = True
 
-            # 3. Correspondance basique
+
             if not found_match:
-                best_match = process.extractOne(video_basename, non_op_nfo_choices.keys(), scorer=fuzz.ratio)
+                best_match = process.extractOne(video_basename, non_op_nfo_map.keys(), scorer=fuzz.ratio)
                 if best_match and best_match[1] >= threshold:
-                    matched_nfo_name = best_match[0]
-                    standard_matches.append((video, non_op_nfo_choices[matched_nfo_name], best_match[1]))
+                    matched_basename = best_match[0]
+                    path = non_op_nfo_map[matched_basename][0]
+                    standard_matches.append((video, path, best_match[1]))
                     found_match = True
 
             if not found_match:
-                # Si aucune correspondance, cherche des suggestions dans TOUS les NFO
-                suggestions = process.extract(video_basename, self.nfo_basenames.keys(), scorer=fuzz.ratio, limit=5)
+                suggestions = process.extract(video_basename, nfo_map.keys(), scorer=fuzz.ratio, limit=5)
                 unmatched.append((video, suggestions))
 
-        # Retourne 3 listes: les matchs standards, les non-matchés, et les matchs multiples de One Piece
         return standard_matches, unmatched, one_piece_matches
 
 

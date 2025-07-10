@@ -319,6 +319,9 @@ class MetadataUpdater:
                 show.uploadArt(url=details['fanart_image'])
             if details.get('theme_music'):
                 show.uploadTheme(url=details['theme_music'])
+            # Norlamement Plex doit ajouter la gestion des logos d'ici peu, comme ça ce sera fait
+            if details.get('logo_image'):
+                show.uploadLogo(url=details['logo_image'])
         except Exception as e:
              logging.error(f"Erreur lors de la mise à jour de : {e}")
 
