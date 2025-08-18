@@ -13,7 +13,7 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Récupération des fichiers modifiés
         id: get-changed-files
         uses: masesgroup/retrieve-changed-files@v3
@@ -50,7 +50,7 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.get-changed-files.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       
       - name: Mise en cache des packages pip
         uses: actions/cache@v4
@@ -131,7 +131,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Download all artifacts
