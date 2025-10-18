@@ -119,6 +119,7 @@ class DatabaseManager:
             cursor = conn.cursor()
             cursor.execute('CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT)')
             cursor.execute('CREATE TABLE IF NOT EXISTS rename (line TEXT UNIQUE)')
+            cursor.execute('CREATE TABLE IF NOT EXISTS folders (key TEXT UNIQUE)')
             
             default_config = {
                 "fankai_parents": "FANKAI_PARENTS", "fankai_telechargement": "FANKAI_TELECHARGEMENT",
