@@ -254,7 +254,7 @@ class UIManager:
         self.config = config
         self.launcher = launcher
         self.menu_options = {
-            "1": {"key": "service", "desc": "Mettre à jour les packs automatiquement", "note": "EMBY SEULEMENT"},
+            "1": {"key": "sync", "desc": "Configurer la synchronisation des packs", "note": "EMBY SEULEMENT"},
             "2": {"key": "placement", "desc": "Placer et renommer vos films Kaï téléchargés"},
             "2a": {"key": "placement_auto", "desc": "Placement automatique puis scan des métadonnées", "note": "PLEX SEULEMENT"},
             "3": {"key": "metadata", "desc": "Scanner les métadonnées de votre bibliothèque", "note": "PLEX SEULEMENT"},
