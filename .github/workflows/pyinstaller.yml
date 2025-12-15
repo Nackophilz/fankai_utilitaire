@@ -53,7 +53,7 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Mise en cache des packages pip
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
@@ -62,7 +62,7 @@ jobs:
       
       - name: Cache pip wheels (Windows)
         if: runner.os == 'Windows'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: c:\users\cleme\appdata\local\pip\cache\wheels
           key: windows-wheels-${{ hashFiles('requirements.txt') }}
@@ -71,7 +71,7 @@ jobs:
       
       - name: Cache pip wheels (macOS)
         if: runner.os == 'macOS'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/Library/Caches/pip/wheels
           key: macOS-wheels-${{ hashFiles('requirements.txt') }}
