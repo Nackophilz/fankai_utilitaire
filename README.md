@@ -14,7 +14,6 @@ _One to rule them all !_
 
 - **Fankai-Sync** : Gère les packs automatiquement pour une synchronisation sans effort.
 - **Fankai-Placement** : Place les films dans le bon dossier et les renomme si nécessaire, simplifiant votre gestion de bibliothèque.
-- **Fankai-Metadata** : Gère les métadonnées Plex en ce basant sur l'API Fankai
 - **Fankai-Config** : Crée et paramètre automatiquement votre bibliothèque Plex pour une expérience personnalisée.
 
 ## Contributions
