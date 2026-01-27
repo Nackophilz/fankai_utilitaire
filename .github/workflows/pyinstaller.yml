@@ -25,7 +25,7 @@ jobs:
         id: set-matrix
         run: |
           files="${{ steps.get-changed-files.outputs.added_modified }}"
-          os_types=("ubicloud" "windows-latest" "macos-13" "macos-14" "ubicloud-standard-2-arm")
+          os_types=("ubicloud" "windows-latest" "macos-14" "ubicloud-standard-2-arm")
           matrix_data=()
           for file in $files; do
             if [[ $file == src/*.py ]]; then
@@ -154,8 +154,6 @@ jobs:
                       destination="setup_linux"
                   elif [[ "$folder" == *"windows-latest"* ]]; then
                       destination="setup"
-                  elif [[ "$folder" == *"macos-13"* ]]; then
-                      destination="setup_macos"
                   elif [[ "$folder" == *"macos-14"* ]]; then
                       destination="setup_macos_arm"
                   else
