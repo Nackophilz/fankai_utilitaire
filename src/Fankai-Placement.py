@@ -92,7 +92,6 @@ def handle_interrupt(sig, frame):
     sys.exit(0)
 
 # --- Classes Métier ---
-
 class DatabaseManager:
     """Gère toutes les opérations sur la base de données SQLite."""
     def __init__(self, db_path):
