@@ -281,7 +281,6 @@ class UIManager:
                 handle_interrupt(None, None)
 
 # --- Fonctions utilitaires et Point d'entrée ---
-
 def clear_host():
     os.system('cls' if os.name == 'nt' else 'clear')
 
