@@ -68,7 +68,6 @@ class Config:
             "service": {"name": "Fankai-Service", "chmod_sync": True},
             "placement": {"name": "Fankai-Placement"},
             "placement_auto": {"name": "Fankai-Placement", "args": ["auto"]},
-            "metadata": {"name": "Fankai-Metadata"},
             "sync": {"name": "Fankai-Sync"}
         }
 
@@ -257,8 +256,6 @@ class UIManager:
         self.menu_options = {
             "1": {"key": "sync", "desc": "Configurer la synchronisation des packs", "note": "EMBY SEULEMENT"},
             "2": {"key": "placement", "desc": "Placer et renommer vos films Kaï téléchargés"},
-            "2a": {"key": "placement_auto", "desc": "Placement automatique puis scan des métadonnées", "note": "PLEX SEULEMENT"},
-            "3": {"key": "metadata", "desc": "Scanner les métadonnées de votre bibliothèque", "note": "PLEX SEULEMENT"},
         }
 
     def display_main_menu(self):

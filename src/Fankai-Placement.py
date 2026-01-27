@@ -248,27 +248,6 @@ class FileSystemManager:
         os.makedirs(os.path.dirname(destination), exist_ok=True)
         shutil.copy2(source, destination)
 
-    def launch_metadata_script(self, script_path, series_list):
-        """Lance le script Fankai-Metadata avec les séries concernées."""
-        if not series_list:
-            logging.info("Aucune nouvelle série à traiter, Fankai-Metadata ne sera pas lancé.")
-            return
-
-        if not script_path.exists():
-            logging.error(f"L'exécutable Fankai-Metadata est introuvable : {script_path}")
-            return
-        
-        series_arg = ",".join(series_list)
-        logging.info(f"Lancement de Fankai-Metadata pour les séries : {series_arg}")
-        try:
-            subprocess.run([str(script_path), "--series", series_arg], check=True)
-            logging.info("Fankai-Metadata s'est terminé avec succès.")
-        except subprocess.CalledProcessError as e:
-            logging.error(f"Erreur lors de l'exécution de Fankai-Metadata : {e}")
-        except Exception as e:
-            logging.error(f"Erreur inattendue au lancement de Fankai-Metadata : {e}")
-
-
 class FileMatcher:
     """Logique de correspondance entre les fichiers vidéo et NFO."""
     
@@ -689,8 +668,6 @@ class Application:
                 if placement_method == 'c':
                     self.ui.confirm_cleanup(placed_files)
 
-                if self.ui.ask_yes_no("Lancer Fankai-Metadata pour mettre à jour les métadonnées ?", default_yes=self.args.auto):
-                    self.fs.launch_metadata_script(self.config.metadata_script_path, list(updated_series))
             else:
                 logging.info("Aucun nouveau fichier n'a été placé.")
 
