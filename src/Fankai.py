@@ -22,7 +22,6 @@ from tqdm import tqdm
 
 # Désactiver les avertissements de certificat SSL (si nécessaire)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
 # --- Configuration & Helpers ---
 
 class Config:
