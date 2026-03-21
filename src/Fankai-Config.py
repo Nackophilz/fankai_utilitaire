@@ -12,6 +12,7 @@ import time
 from getpass import getpass
 from pathlib import Path
 
+from click import pause
 import pyfiglet
 import requests
 import urllib3
@@ -69,7 +70,7 @@ class Config:
     def _define_tools(self):
         """Définit la liste des outils à télécharger."""
         self.tools_to_download = [
-            "Fankai-All", "Fankai-Config", "Fankai-Metadata",
+            "Fankai-All", "Fankai-Config",
             "Fankai-Placement", "Fankai-Service", "Fankai-Sync"
         ]
 
@@ -172,14 +173,25 @@ class PlexApiManager:
                 resource = resources[0]
             
             logging.info(f"Serveur sélectionné : {resource.name}")
-            local_conn = next((c.uri for c in resource.connections if c.local), None)
-            remote_conn = next((c.uri for c in resource.connections if not c.local), None)
             
+            try:
+                logging.info("Recherche d'une connexion valide au serveur (cela peut prendre un moment)...")
+                server = resource.connect(timeout=10)
+                base_url = server._baseurl
+            except Exception as e:
+                logging.warning(f"Impossible de se connecter automatiquement au serveur : {e}")
+                local_conn = next((c.uri for c in resource.connections if c.local), None)
+                remote_conn = next((c.uri for c in resource.connections if not c.local), None)
+                base_url = local_conn or remote_conn
+            
+            local_conn_info = next((c.uri for c in resource.connections if c.local), "URL_SECOURS")
+            remote_conn_info = next((c.uri for c in resource.connections if not c.local), "URL_PLEX")
+
             server_details = {
                 "token": resource.accessToken,
-                "base_url": local_conn or remote_conn,
-                "plex_ip_locale": local_conn or "URL_SECOURS",
-                "plex_ip_publique": remote_conn or "URL_PLEX",
+                "base_url": base_url,
+                "plex_ip_locale": local_conn_info,
+                "plex_ip_publique": remote_conn_info,
                 "user_plex": username
             }
             
@@ -193,29 +205,108 @@ class PlexApiManager:
                 "plex_ip_publique": server_details["plex_ip_publique"],
                 "user_plex": server_details["user_plex"]
             })
+            logging.info(f"Connexion établie via : {server_details['base_url']}")
             logging.info("Authentification et récupération des informations du serveur réussies.")
             return server_details
         
         logging.error("Trop de tentatives d'authentification échouées.")
         return None
 
+    def register_fankai_metadata_provider(self, server_details):
+        """Enregistre le fournisseur et s'assure que le groupe d'agents associé existe. Retourne (identifier, group_id)."""
+        logging.info("Vérification du fournisseur et du groupe d'agents Fankai...")
+        base_url = server_details['base_url']
+        headers = {'X-Plex-Token': server_details['token'], 'Accept': 'application/json'}
+        target_uri = 'https://metadata.fankai.fr/plex'
+        
+        agent_identifier = 'tv.plex.agents.custom.fankai'
+        group_id = None
+
+        def get_existing_group(identifier):
+            try:
+                r = requests.get(f"{base_url}/media/providers/metadata/group", headers=headers, verify=False, timeout=10)
+                if r.status_code == 200 and r.text.strip():
+                    groups = r.json().get('MediaContainer', {}).get('MetadataAgentProviderGroup', [])
+                    for g in groups:
+                        if g.get('primaryIdentifier') == identifier:
+                            return g
+            except Exception as e:
+                logging.debug(f"Erreur lors de la recherche du groupe : {e}")
+            return None
+
+        try:
+            # 1. Enregistrement/Vérification du Fournisseur (Provider)
+            resp = requests.get(f"{base_url}/media/providers/metadata", headers=headers, verify=False, timeout=10)
+            if resp.status_code == 200 and resp.text.strip():
+                providers = resp.json().get('MediaContainer', {}).get('MetadataAgentProvider', [])
+                fankai_provider = next((p for p in providers if p.get('uri') == target_uri), None)
+            else:
+                fankai_provider = None
+
+            if not fankai_provider:
+                logging.info("Enregistrement du nouveau fournisseur Fankai...")
+                resp = requests.post(f"{base_url}/media/providers/metadata", headers=headers, params={'uri': target_uri}, verify=False, timeout=10)
+                if resp.status_code in [200, 201] and resp.text.strip():
+                    fankai_provider = resp.json().get('MediaContainer', {}).get('MetadataAgentProvider', [{}])[0]
+            
+            if fankai_provider:
+                agent_identifier = fankai_provider.get('identifier', agent_identifier)
+                logging.info(f"Fournisseur Fankai opérationnel (ID: {agent_identifier})")
+
+            # 2. Vérification/Création du Groupe d'Agents
+            fankai_group = get_existing_group(agent_identifier)
+
+            if not fankai_group:
+                logging.info("Création du groupe d'agents Fankai...")
+                params = {'title': 'Fankai', 'primaryIdentifier': agent_identifier}
+                resp = requests.post(f"{base_url}/media/providers/metadata/group", headers=headers, params=params, verify=False, timeout=10)
+                
+                if resp.status_code in [200, 201] and resp.text.strip():
+                    fankai_group = resp.json().get('MediaContainer', {}).get('MetadataAgentProviderGroup', [{}])[0]
+                else:
+                    fankai_group = get_existing_group(agent_identifier)
+
+            if fankai_group:
+                group_id = fankai_group.get('id')
+                logging.info(f"Groupe d'agents Fankai identifié (ID Groupe: {group_id})")
+            else:
+                logging.warning("Note: Impossible de récupérer l'ID du groupe d'agents. La création de bibliothèque risque d'échouer.")
+
+            return agent_identifier, group_id
+
+        except Exception as e:
+            logging.error(f"Erreur lors de la configuration des agents : {e}")
+            # En cas d'erreur de parsing JSON, on affiche un bout de la réponse pour débugger
+            if 'resp' in locals() and hasattr(resp, 'text'):
+                logging.debug(f"Réponse brute de Plex : {resp.text[:200]}")
+            return agent_identifier, group_id
+
     def create_library(self, server_details, library_name, library_path):
         """Crée une nouvelle bibliothèque de séries via un appel API direct."""
-        logging.info(f"Tentative de création de la bibliothèque '{library_name}'...")
+        
+        # Configuration complète (Fournisseur + Groupe d'Agents)
+        agent_identifier, group_id = self.register_fankai_metadata_provider(server_details)
+        
+        logging.info(f"Tentative de création de la bibliothèque '{library_name}' (Agent: {agent_identifier}, Groupe: {group_id})...")
 
         url = f"{server_details['base_url']}/library/sections"
         headers = {'X-Plex-Token': server_details['token'], 'Accept': 'application/json'}
         params = {
             'type': 'show',
             'name': library_name,
-            'agent': 'com.plexapp.agents.none',
-            'scanner': 'Plex Series Scanner',
-            'language': 'xn',
-            'location': library_path
+            'agent': agent_identifier,
+            'scanner': 'Plex TV Series',
+            'language': 'fr-FR',
+            'location': library_path,
+            'prefs[showSeasonTitles]': '1'
         }
         
+        # Si on a récupéré un ID de groupe, on l'ajoute pour le scanner
+        if group_id:
+            params['metadataAgentProviderGroupId'] = str(group_id)
+        
         try:
-            response = requests.post(url, headers=headers, params=params, verify=False)
+            response = requests.post(url, headers=headers, params=params, verify=False, timeout=15)
             response.raise_for_status()
             logging.info(f"Bibliothèque '{library_name}' créée avec succès sur Plex !")
             return True
@@ -287,15 +378,15 @@ class UIManager:
         server_details = self.plex_manager.authenticate_and_get_server_details()
         if not server_details:
             return
-            
+        
         self._configure_plex_library(server_details)
 
     def _configure_plex_library(self, server_details):
         """Demande les informations pour créer la bibliothèque et la crée."""
         clear_host()
-        logging.info("Configuration de la nouvelle bibliothèque FanKai.")
+        logging.info("Configuration de la nouvelle bibliothèque Fankai.")
         
-        library_name = input("Nom pour la bibliothèque [FanKai] : ") or "FanKai"
+        library_name = input("Nom pour la bibliothèque [Fankai] : ") or "Fankai"
         self.db_manager.update_config({"bibliotheque": library_name})
         
         while True:
