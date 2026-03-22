@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 import argparse
 import logging
@@ -213,8 +213,8 @@ class FileSystemManager:
         return nfo_files
 
     def get_nfo_files_from_api(self, media_path, api_base_url):
-        """Récupère la liste des chemins de fichiers NFO depuis l'API Fankai."""
-        nfo_files = []
+        """Récupère la liste des chemins de fichiers NFO depuis l'API Fankai avec leur nom formaté."""
+        nfo_data = {}
         api_endpoint = f"{api_base_url}/episodes/infos"
         logging.info(f"Récupération des fichiers NFO depuis l'API : {api_endpoint}...")
         try:
@@ -223,11 +223,11 @@ class FileSystemManager:
             data = response.json()
             for item in data:
                 if 'nfo_path' in item and item['nfo_path']:
-                    full_path = os.path.join(media_path, item['nfo_path'])
-                    nfo_files.append(full_path)
+                    full_path = os.path.normpath(os.path.join(media_path, item['nfo_path']))
+                    nfo_data[full_path] = item.get('formatted_name')
         except requests.RequestException as e:
             logging.error(f"Erreur lors de la récupération des NFO depuis l'API : {e}")
-        return nfo_files
+        return nfo_data
 
     def create_atomic_link(self, source, destination):
         """Crée un hardlink en créant les répertoires parents."""
@@ -325,7 +325,7 @@ class FilePlacer:
         self.is_auto = is_auto_mode
 
 
-    def place_files(self, standard_matches, op_matches, placement_mode, media_root):
+    def place_files(self, standard_matches, op_matches, placement_mode, media_root, nfo_map=None):
         """
         Traite tous les fichiers. Gère les matchs standards (1-pour-1) et les 
         matchs One Piece (1-pour-plusieurs). Permet le remplacement de fichiers.
@@ -355,10 +355,16 @@ class FilePlacer:
                         logging.warning(f"Placement ignoré : Le fichier non-Yabai '{os.path.basename(video)}' ne peut pas aller dans la destination Yabai '{os.path.relpath(nfo, media_root)}'.")
                         continue
                 
-                nfo_basename = os.path.splitext(os.path.basename(nfo))[0]
+                # Détermination du nom de base pour la destination
+                nfo_key = os.path.normpath(nfo)
+                if nfo_map and nfo_key in nfo_map and nfo_map[nfo_key]:
+                    base_name = nfo_map[nfo_key]
+                else:
+                    base_name = os.path.splitext(os.path.basename(nfo))[0]
+
                 destination_folder = os.path.dirname(nfo)
                 extension = os.path.splitext(video)[1]
-                destination_file = os.path.join(destination_folder, f"{nfo_basename}{extension}")
+                destination_file = os.path.join(destination_folder, f"{base_name}{extension}")
 
                 try:
                     # Si le fichier existe déjà, on l'ignore et passe au suivant.
@@ -474,25 +480,30 @@ class UIManager:
         return choice
     
     def confirm_plex_usage(self):
-        """Demande à l'utilisateur s'il utilise le plugin Plex si ce n'est pas déjà configuré."""
+        """Demande à l'utilisateur s'il utilise le plugin Plex/Jellyfin/Emby."""
         config = self.db.load_config()
-        plex_plugin_setting = config.get("plex_plugin")
+        choice = config.get("plex_plugin")
 
         if self.is_auto:
-            if plex_plugin_setting not in ['y', 'n']:
+            if choice not in ['y', 'n']:
                 logging.error("Le paramètre du plugin Plex (y/n) n'est pas configuré. Impossible de continuer en mode auto.")
                 sys.exit(1)
-            return plex_plugin_setting == 'y'
+            return choice == 'y'
 
-        if plex_plugin_setting == "PLEX_PLUGIN" or plex_plugin_setting is None:
-             if self.ask_yes_no("Utilisez-vous l'intégration Plex (récupération des données via l'API) ?"):
-                 self.db.update_config({'plex_plugin': 'y'})
-                 return True
-             else:
-                 self.db.update_config({'plex_plugin': 'n'})
-                 return False
+        if choice in ['y', 'n']:
+            action = "Activé" if choice == 'y' else "Désactivé"
+            if self.ask_with_timeout(f"Le mode API (Plex/Jellyfin/Emby) est '{action}'. Appuyez sur une touche pour changer.", 5):
+                choice = None # Forcer un nouveau choix
+
+        while choice not in ['y', 'n']:
+            clear_host()
+            if self.ask_yes_no("Utilisez-vous un agent Jellyfin/Emby/Plex (récupération des données via l'API) ?"):
+                choice = 'y'
+            else:
+                choice = 'n'
         
-        return plex_plugin_setting == 'y'
+        self.db.update_config({"plex_plugin": choice})
+        return choice == 'y'
             
 
     def display_help(self):
@@ -513,7 +524,7 @@ class UIManager:
         logging.info("=" * 50)
         self.pause()
 
-    def handle_unmatched(self, unmatched_files, nfo_files, placement_mode, media_root):
+    def handle_unmatched(self, unmatched_files, nfo_files, placement_mode, media_root, nfo_map=None):
         if self.is_auto or not unmatched_files:
             return
         
@@ -545,7 +556,7 @@ class UIManager:
                 
 
                 placer = FilePlacer(FileSystemManager(), self.db, self, self.is_auto)
-                placer.place_files([], {video: [(nfo, 102)]}, placement_mode, media_root)
+                placer.place_files([], {video: [(nfo, 102)]}, placement_mode, media_root, nfo_map)
 
 
             except (ValueError, IndexError):
@@ -638,8 +649,10 @@ class Application:
         video_files = self.fs.collect_video_files(download_path)
 
         plex_enabled = self.ui.confirm_plex_usage()
+        nfo_map = {}
         if plex_enabled:
-            nfo_files = self.fs.get_nfo_files_from_api(media_path, self.config.api_base_url)
+            nfo_map = self.fs.get_nfo_files_from_api(media_path, self.config.api_base_url)
+            nfo_files = list(nfo_map.keys())
         else:
             nfo_files = self.fs.list_nfo_files(media_path)
         
@@ -658,7 +671,7 @@ class Application:
         if not standard_matches and not op_matches and not unmatched:
              logging.warning("Aucune correspondance trouvée pour les fichiers vidéo.")
         else:
-            placed_files, updated_series = self.placer.place_files(standard_matches, op_matches, placement_method, media_path)
+            placed_files, updated_series = self.placer.place_files(standard_matches, op_matches, placement_method, media_path, nfo_map)
             
             if placed_files:
                 logging.info(f"\nPlacement terminé. {len(placed_files)} fichier(s) source traité(s).")
@@ -670,7 +683,7 @@ class Application:
             else:
                 logging.info("Aucun nouveau fichier n'a été placé.")
 
-        self.ui.handle_unmatched(unmatched, nfo_files, placement_method, media_path)
+        self.ui.handle_unmatched(unmatched, nfo_files, placement_method, media_path, nfo_map)
 
         logging.info("\nScript terminé.")
 
