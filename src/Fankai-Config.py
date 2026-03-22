@@ -12,7 +12,6 @@ import time
 from getpass import getpass
 from pathlib import Path
 
-from click import pause
 import pyfiglet
 import requests
 import urllib3
